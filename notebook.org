@@ -1,0 +1,123 @@
+#+TITLE: Notebook Feedback Sort
+#+AUTHOR: Quentin Guilloteau
+
+* <2020-03-14 Sat>
+** The idea
+The idea is to have randomly (?) some measurments of same size
+parallel and sequential.
+we compare the performances and changes the block size accordingly.
+
+We have to make sure that in the subtree where we do the measurement,
+we do not make any measurement again, otherwise it will invalidate the
+measurement
+
+We also do not want to do a measure too early because having to do a
+big part of the array sequentially will propably affect the
+performances
+
+*What type of controller should we use ?*
+
+Should the block size be a parameter of the function instead of a
+global variable ?
+
+We could compare the execution of the subtree depending only on the
+size of the block
+
+We have to think about what we want to do:
+- either we compare parallel parts with parallel parts
+- or we compare parallel parts with sequential parts
+
+At the momemt I think that the second point is more interesting.
+
+It will be also easier if the parallel separation is done depth first
+on the way up, so we can "learn" for the future sub trees.
+Does this means that we can not use OpenMP ? pthread ?
+
+If for the same amount of work:
+- t_seq > t_par: decrease the block size
+- t_seq < t_par: increase the block size
+  - because it means that the cost due to the task creation offsets
+    the gain of parallelism
+  - so we need to increase the block size to spend more time in parallel
+    
+When should we do the comparision versus sequential ?
+it sould be done one level higher than the block size.
+That means that if at level n we did not reach the block size, but
+that at level n + 2 we reach the block size, we should compare the
+execution of the n + 1 levels
+
+                 n
+		/ \
+               /   \
+              /     \
+             /       \
+            /         \
+           n + 1     n + 1 : Sequential  # We do not reach the block size
+          /   \ 
+         /     \
+        /       \
+       /         \
+     n+2: seq    n+2: seq  # We reach the block size -> seq sort      
+
+Or we can do something like Wagner did in rayon-logs to compare speeds
+The idea is to give a cost function and then be able to compare what
+was previously not comparable
+if we have an array of 10.000 elements and an array of 100.000
+elements,
+if sorting the first array takes 100ms then with the cost function
+n->nlogn
+we would have a speed of 10.000 * log(10.000) / 100e-6
+for the second one 100.000 * log(100.000) / 1000e-6
+#+BEGIN_SRC python :session pysess
+from math import log
+n1 = 10000
+n2 = 100000
+t1 = 100 #ms
+t2 = 1000 #ms
+
+def speed(n, t):
+    return n * log(n) / t
+#+END_SRC
+
+#+BEGIN_SRC python :session pysess
+speed(n1, t1)
+#+END_SRC
+
+#+RESULTS:
+: 921.0340371976183
+
+#+BEGIN_SRC python :session pysess
+speed(n2, t2)
+#+END_SRC
+
+#+RESULTS:
+: 1151.292546497023
+
+As expected, the second block is much slower
+
+But still, it does not really focues on the time of sequential versus
+the time of the parallel
+
+What would be the cost if we do one over two leaf of sub tree
+sequentially ?
+
+*What we need to do it to compute the speedup and take as a reference
+the number of threads in the system !*
+** Technics
+Probably have a mutex variable representing the block size
+
+#+BEGIN_SRC c
+void mergesort(int* tab, int size) {
+    if (size < block_size) {
+       seq_sort(tab, size);
+    } else {
+        int mid = size / 2;
+#pragma omp task
+        mergesort(tab, mid);
+#pragma omp task
+        mergesort(tab + mid, size - mid);
+#pragma omp taskwait
+        merge(tab, size);
+    }
+}
+#+END_SRC
