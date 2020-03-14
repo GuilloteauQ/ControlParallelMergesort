@@ -8,8 +8,15 @@ in {
     src = ./.;
     buildInputs = [
       gcc
+      clang
       coreutils
       # openmp
+      texlive.combined.scheme-full
+      R
+      pandoc
+      rPackages.ggplot2
+      rPackages.knitr
+      rPackages.rmarkdown
     ];
     installPhase = ''
       mkdir -p $out
