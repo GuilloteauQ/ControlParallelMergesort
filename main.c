@@ -6,12 +6,12 @@
 #include <pthread.h>
 
 int block_size = 10;
-double reference = 1.2; // nb of threads in the system
+double reference = 0; // nb of threads in the system
 int cumulated_error = 0;
 
 pthread_mutex_t mutex_reference;
 
-double kp = 2.5;
+double kp = 0.0;
 double ki = 0.0;
 
 void controller(double speedup) {
@@ -21,7 +21,7 @@ void controller(double speedup) {
         cumulated_error += error;
         block_size = block_size + kp * error + ki * cumulated_error;
         block_size = (block_size <= 0) ? 1 : block_size;
-        printf("%d\n", block_size);
+        printf("%lf, %d\n", speedup, block_size);
     }
     pthread_mutex_unlock(&mutex_reference);
 }
@@ -59,23 +59,24 @@ void merge(int* tab, int size) {
     free(tmp);
 }
 
-void seq_sort(int* tab, int size) {
-    if (size > 1) {
-        int mid = size / 2;
-        seq_sort(tab, mid);
-        seq_sort(tab + mid, size - mid);
-        merge(tab, size);
-    }
+// void seq_sort(int* tab, int size) {
+//     if (size > 1) {
+//         int mid = size / 2;
+//         seq_sort(tab, mid);
+//         seq_sort(tab + mid, size - mid);
+//         merge(tab, size);
+//     }
+// }
+
+static int cmp(const void* x, const void* y) {
+    const int* xInt = x;
+    const int* yInt = y;
+
+    return *xInt - *yInt;
 }
 
-double measured_seq_sort(int* tab, int size) {
-    double seq_start, seq_end;
-    seq_start = omp_get_wtime();
-    seq_sort(tab, size);
-    seq_end = omp_get_wtime();
-    double seq_total_time = seq_end - seq_start;
-    printf("seq_t: %lf\n", seq_total_time);
-    return seq_total_time;
+void seq_sort(int* tab, int size) {
+    qsort(tab, size, sizeof(int), cmp);
 }
 
 void mergesort(int* tab, int size) {
@@ -144,12 +145,14 @@ void is_sorted(int* tab, int size) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        fprintf(stderr, "Bad Usage: %s [size] [block_size]\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "Bad Usage: %s [size] [block_size] [reference] [kp]\n", argv[0]);
         return 1;
     }
     int size = atoi(argv[1]);
     block_size = atoi(argv[2]);
+    reference = atof(argv[3]);
+    kp = atof(argv[4]);
     int* tab = create_tab(size);
 
     pthread_mutex_init(&mutex_reference, NULL);
