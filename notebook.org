@@ -1,6 +1,13 @@
 #+TITLE: Notebook Feedback Sort
 #+AUTHOR: Quentin Guilloteau
 
+* [0%] TODO
+- [ ] design of experiment
+- [ ] qsort as seqsort
+- [ ] definition of ki
+- [ ] prepare some graph
+- [ ] make it easy to compare
+
 * <2020-03-14 Sat>
 ** The idea
 The idea is to have randomly (?) some measurments of same size
@@ -46,6 +53,7 @@ That means that if at level n we did not reach the block size, but
 that at level n + 2 we reach the block size, we should compare the
 execution of the n + 1 levels
 
+#+BEGIN_EXAMPLE
                  n
 		/ \
                /   \
@@ -58,6 +66,8 @@ execution of the n + 1 levels
         /       \
        /         \
      n+2: seq    n+2: seq  # We reach the block size -> seq sort      
+
+#+END_EXAMPLE
 
 Or we can do something like Wagner did in rayon-logs to compare speeds
 The idea is to give a cost function and then be able to compare what
@@ -121,3 +131,4 @@ void mergesort(int* tab, int size) {
     }
 }
 #+END_SRC
+
