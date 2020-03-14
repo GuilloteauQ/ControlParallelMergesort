@@ -1,12 +1,13 @@
 #+TITLE: Notebook Feedback Sort
 #+AUTHOR: Quentin Guilloteau
 
-* [0%] TODO
+* [33%] TODO
 - [ ] design of experiment
-- [ ] qsort as seqsort
-- [ ] definition of ki
+- [X] qsort as seqsort
+- [X] definition of ki
 - [ ] prepare some graph
 - [ ] make it easy to compare
+- [ ] randomization of the measurements
 
 * <2020-03-14 Sat>
 ** The idea
@@ -54,6 +55,7 @@ that at level n + 2 we reach the block size, we should compare the
 execution of the n + 1 levels
 
 #+BEGIN_EXAMPLE
+
                  n
 		/ \
                /   \
@@ -113,6 +115,10 @@ sequentially ?
 
 *What we need to do it to compute the speedup and take as a reference
 the number of threads in the system !*
+
+Also, what we want is not really to increase the block size by adding,
+but we want to change the level of the end of the recursion.
+so multiplying and dividing the block size by 2 make more sense
 ** Technics
 Probably have a mutex variable representing the block size
 

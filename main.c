@@ -7,21 +7,21 @@
 
 int block_size = 0;
 double reference = 0;  // nb of threads in the system
-int cumulated_error = 0;
-
+// int cumulated_error = 0;
 int num_threads = 0;
-
-pthread_mutex_t mutex_reference;
-
 double kp = 0.0;
 double ki = 0.0;
+pthread_mutex_t mutex_reference;
 
 void controller(double speedup) {
     pthread_mutex_lock(&mutex_reference);
-    if (speedup / reference <= 2) {
+    if (speedup / num_threads <= 2) {
         double error = reference - speedup;
-        cumulated_error += error;
-        block_size = block_size + kp * error + ki * cumulated_error;
+        // cumulated_error += error;
+        // block_size =
+        //     (int)((double)block_size + kp * error);  // + ki *
+        //     cumulated_error;
+        block_size = (error <= 0.0) ? block_size / 2 : block_size * 2;
         block_size = (block_size <= 0) ? 1 : block_size;
         printf("%lf, %d\n", speedup, block_size);
     }
@@ -72,50 +72,63 @@ void seq_sort(int* tab, int size) {
     qsort(tab, size, sizeof(int), cmp);
 }
 
-void mergesort(int* tab, int size) {
+void mergesort(int* tab, int size, int is_in_measure) {
     int mid = size / 2;
     int reduced_size =
         size / (2 * num_threads);  // probably more a power than a *
     int local_block_size = get_block_size();
-    if (reduced_size > local_block_size) {
-        // We continue normally
+    if (is_in_measure) {
+        if (size <= local_block_size) {
+            seq_sort(tab, size);
+        } else {
 #pragma omp task
-        mergesort(tab, mid);
+            mergesort(tab, mid, is_in_measure);
 #pragma omp task
-        mergesort(tab + mid, size - mid);
+            mergesort(tab + mid, size - mid, is_in_measure);
 #pragma omp taskwait
-        merge(tab, size);
-    } else if (reduced_size <= local_block_size &&
-               reduced_size >= local_block_size / 2) {
-        // We need to do one sub tree in parallel the other in sequential
-        double seq_total_time;
-        double par_total_time;
-#pragma omp task shared(par_total_time)
-        {
-            double par_start, par_end;
-            par_start = omp_get_wtime();
-
-            mergesort(tab, mid);
-
-            par_end = omp_get_wtime();
-            par_total_time = par_end - par_start;
+            merge(tab, size);
         }
-#pragma omp task shared(seq_total_time)
-        {
-            double seq_start, seq_end;
-            seq_start = omp_get_wtime();
-
-            seq_sort(tab + mid, size - mid);
-
-            seq_end = omp_get_wtime();
-            seq_total_time = seq_end - seq_start;
-        }
-#pragma omp taskwait
-        merge(tab, size);
-        double speedup = seq_total_time / par_total_time;
-        controller(speedup);
     } else {
-        seq_sort(tab, size);
+        if (reduced_size > local_block_size) {
+            // We continue normally
+#pragma omp task
+            mergesort(tab, mid, is_in_measure);
+#pragma omp task
+            mergesort(tab + mid, size - mid, is_in_measure);
+#pragma omp taskwait
+            merge(tab, size);
+        } else {
+            is_in_measure = 1;
+            // We need to do one sub tree in parallel the other in sequential
+            double seq_total_time;
+            double par_total_time;
+#pragma omp task shared(par_total_time)
+            {
+                double par_start, par_end;
+                par_start = omp_get_wtime();
+
+                mergesort(tab, mid, is_in_measure);
+
+                par_end = omp_get_wtime();
+                par_total_time = par_end - par_start;
+            }
+#pragma omp task shared(seq_total_time)
+            {
+                double seq_start, seq_end;
+                seq_start = omp_get_wtime();
+
+                seq_sort(tab + mid, size - mid);
+
+                seq_end = omp_get_wtime();
+                seq_total_time = seq_end - seq_start;
+            }
+#pragma omp taskwait
+            merge(tab, size);
+            double speedup = seq_total_time / par_total_time;
+            printf("kp: %f, reference: %f, size: %d, mid: %d, speedup: %f\n",
+                   kp, reference, size, mid, speedup);
+            controller(speedup);
+        }
     }
 }
 
@@ -159,7 +172,7 @@ int main(int argc, char** argv) {
 #pragma omp single
         {
             num_threads = omp_get_num_threads();
-            mergesort(tab, size);
+            mergesort(tab, size, 0);
         }
     }
     is_sorted(tab, size);
