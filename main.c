@@ -1,23 +1,26 @@
 #include <assert.h>
 #include <omp.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-int block_size = 0;
+size_t block_size = 0;
 double reference = 0;  // nb of threads in the system
 // int cumulated_error = 0;
-int num_threads = 0;
+uint8_t num_threads = 0;
 double kp = 0.0;
 double ki = 0.0;
+uint8_t percentage = 0;
 pthread_mutex_t mutex_reference;
 
 void controller(double speedup) {
     pthread_mutex_lock(&mutex_reference);
     if (speedup / num_threads <= 2) {
         double error = reference - speedup;
-        block_size = (int)((double)block_size + kp * error);
+        block_size = (size_t)((double)block_size + kp * error);
         // block_size = (error <= 0.0) ? block_size / 2 : block_size * 2;
         block_size = (block_size <= 0) ? 1 : block_size;
         // printf("%lf, %d\n", speedup, block_size);
@@ -25,22 +28,22 @@ void controller(double speedup) {
     pthread_mutex_unlock(&mutex_reference);
 }
 
-int get_block_size() {
-    int local_block_size;
+size_t get_block_size() {
+    size_t local_block_size;
     pthread_mutex_lock(&mutex_reference);
     local_block_size = block_size;
     pthread_mutex_unlock(&mutex_reference);
     return local_block_size;
 }
 
-void merge(int* tab, int size) {
+void merge(int* tab, size_t size) {
     int* tmp = malloc(sizeof(int) * size);
 
-    int mid = size / 2;
+    size_t mid = size / 2;
 
-    int a = 0;
-    int b = mid;
-    int c = 0;
+    size_t a = 0;
+    size_t b = mid;
+    size_t c = 0;
 
     while (a < mid && b < size) {
         tmp[c++] = (tab[a] < tab[b]) ? tab[a++] : tab[b++];
@@ -65,12 +68,12 @@ static int cmp(const void* x, const void* y) {
     return *xInt - *yInt;
 }
 
-void seq_sort(int* tab, int size) {
+void seq_sort(int* tab, size_t size) {
     qsort(tab, size, sizeof(int), cmp);
 }
 
-void regular_mergesort(int* tab, int size, int local_block_size) {
-    int mid = size / 2;
+void regular_mergesort(int* tab, size_t size, size_t local_block_size) {
+    size_t mid = size / 2;
     if (size <= local_block_size) {
         seq_sort(tab, size);
     } else {
@@ -83,11 +86,11 @@ void regular_mergesort(int* tab, int size, int local_block_size) {
     }
 }
 
-void mergesort(int* tab, int size, int is_in_measure) {
-    int mid = size / 2;
-    int reduced_size =
+void mergesort(int* tab, size_t size, size_t is_in_measure) {
+    size_t mid = size / 2;
+    size_t reduced_size =
         size / (2 * num_threads);  // probably more a power than a *
-    int local_block_size = get_block_size();
+    uint8_t local_block_size = get_block_size();
     if (is_in_measure) {
         if (size <= local_block_size) {
             seq_sort(tab, size);
@@ -100,7 +103,7 @@ void mergesort(int* tab, int size, int is_in_measure) {
             merge(tab, size);
         }
     } else {
-        if (reduced_size > local_block_size) {
+        if ((rand() % 100 < percentage) && reduced_size > local_block_size) {
             // We continue normally
 #pragma omp task
             mergesort(tab, mid, is_in_measure);
@@ -150,28 +153,30 @@ void mergesort(int* tab, int size, int is_in_measure) {
     }
 }
 
-int* create_tab(int size) {
+int* create_tab(size_t size) {
     int* tab = malloc(sizeof(int) * size);
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         tab[i] = size - i - 1;
     }
     return tab;
 }
 
-void print_tab(int* tab, int size) {
-    for (int i = 0; i < size; i++) {
+void print_tab(int* tab, size_t size) {
+    for (size_t i = 0; i < size; i++) {
         printf("%d ", tab[i]);
     }
     printf("\n");
 }
 
-void is_sorted(int* tab, int size) {
-    for (int i = 0; i < size - 1; i++) {
+void is_sorted(int* tab, size_t size) {
+    for (size_t i = 0; i < size - 1; i++) {
         assert(tab[i] <= tab[i + 1]);
     }
 }
 
-double measure_exec_time(int size, void (*sort)(int*, int, int), int init) {
+double measure_exec_time(size_t size,
+                         void (*sort)(int*, size_t, size_t),
+                         int init) {
     double start, end;
     int* tab = create_tab(size);
 #pragma omp parallel
@@ -190,24 +195,37 @@ double measure_exec_time(int size, void (*sort)(int*, int, int), int init) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 5) {
-        fprintf(stderr, "Bad Usage: %s [size] [block_size] [reference] [kp]\n",
-                argv[0]);
+    srand(time(NULL));
+    if (argc != 6) {
+        fprintf(
+            stderr,
+            "Bad Usage: %s [size] [block_size] [reference] [kp] [percentage]\n",
+            argv[0]);
         return 1;
     }
-    int size = atoi(argv[1]);
+    size_t size = atoi(argv[1]);
     block_size = atoi(argv[2]);
     reference = atof(argv[3]);
     kp = atof(argv[4]);
+    percentage = atoi(argv[5]);
 
     pthread_mutex_init(&mutex_reference, NULL);
 
-    double control_time = measure_exec_time(size, mergesort, 0);
+    double control_time = measure_exec_time(atoi(argv[1]), mergesort, 0);
     double parallel_time =
-        measure_exec_time(size, regular_mergesort, atoi(argv[2]));
+        measure_exec_time(atoi(argv[1]), regular_mergesort, atoi(argv[2]));
+    double speedup = parallel_time / control_time;
 
-    printf("control: %lf, parallel: %lf\n", control_time, parallel_time);
+    // pretty print
+    // printf("control: %lf, parallel: %lf -> speedup: %lf\n", control_time,
+    //        parallel_time, speedup);
 
+    // csv print
+    // num_threads, size, initial_block_size, reference, kp, percentage,
+    // control_time, parallel_time, speedup
+    printf("%d, %ld, %d, %f, %f, %d, %lf, %lf, %lf\n", num_threads, size,
+           atoi(argv[2]), atof(argv[3]), kp, percentage, control_time,
+           parallel_time, speedup);
     pthread_mutex_destroy(&mutex_reference);
     return 0;
 }
