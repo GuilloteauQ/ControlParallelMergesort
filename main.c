@@ -17,13 +17,10 @@ void controller(double speedup) {
     pthread_mutex_lock(&mutex_reference);
     if (speedup / num_threads <= 2) {
         double error = reference - speedup;
-        // cumulated_error += error;
-        // block_size =
-        //     (int)((double)block_size + kp * error);  // + ki *
-        //     cumulated_error;
-        block_size = (error <= 0.0) ? block_size / 2 : block_size * 2;
+        block_size = (int)((double)block_size + kp * error);
+        // block_size = (error <= 0.0) ? block_size / 2 : block_size * 2;
         block_size = (block_size <= 0) ? 1 : block_size;
-        printf("%lf, %d\n", speedup, block_size);
+        // printf("%lf, %d\n", speedup, block_size);
     }
     pthread_mutex_unlock(&mutex_reference);
 }
@@ -72,6 +69,20 @@ void seq_sort(int* tab, int size) {
     qsort(tab, size, sizeof(int), cmp);
 }
 
+void regular_mergesort(int* tab, int size, int local_block_size) {
+    int mid = size / 2;
+    if (size <= local_block_size) {
+        seq_sort(tab, size);
+    } else {
+#pragma omp task
+        regular_mergesort(tab, mid, local_block_size);
+#pragma omp task
+        regular_mergesort(tab + mid, size - mid, local_block_size);
+#pragma omp taskwait
+        merge(tab, size);
+    }
+}
+
 void mergesort(int* tab, int size, int is_in_measure) {
     int mid = size / 2;
     int reduced_size =
@@ -99,7 +110,8 @@ void mergesort(int* tab, int size, int is_in_measure) {
             merge(tab, size);
         } else {
             is_in_measure = 1;
-            // We need to do one sub tree in parallel the other in sequential
+            // We need to do one sub tree in parallel the other in
+            // sequential
             double seq_total_time;
             double par_total_time;
 #pragma omp task shared(par_total_time)
@@ -125,8 +137,14 @@ void mergesort(int* tab, int size, int is_in_measure) {
 #pragma omp taskwait
             merge(tab, size);
             double speedup = seq_total_time / par_total_time;
-            printf("kp: %f, reference: %f, size: %d, mid: %d, speedup: %f\n",
-                   kp, reference, size, mid, speedup);
+            // printf(
+            //     "num_threads: %d, kp: %f, reference: %f, block_size: %d,
+            //     size: "
+            //     "%d, mid: "
+            //     "%d, "
+            //     "speedup: %f\n",
+            //     num_threads, kp, reference, local_block_size, size, mid,
+            //     speedup);
             controller(speedup);
         }
     }
@@ -153,6 +171,24 @@ void is_sorted(int* tab, int size) {
     }
 }
 
+double measure_exec_time(int size, void (*sort)(int*, int, int), int init) {
+    double start, end;
+    int* tab = create_tab(size);
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+            num_threads = omp_get_num_threads();
+            start = omp_get_wtime();
+            sort(tab, size, init);
+            end = omp_get_wtime();
+        }
+    }
+    is_sorted(tab, size);
+    free(tab);
+    return end - start;
+}
+
 int main(int argc, char** argv) {
     if (argc != 5) {
         fprintf(stderr, "Bad Usage: %s [size] [block_size] [reference] [kp]\n",
@@ -163,19 +199,15 @@ int main(int argc, char** argv) {
     block_size = atoi(argv[2]);
     reference = atof(argv[3]);
     kp = atof(argv[4]);
-    int* tab = create_tab(size);
 
     pthread_mutex_init(&mutex_reference, NULL);
 
-#pragma omp parallel
-    {
-#pragma omp single
-        {
-            num_threads = omp_get_num_threads();
-            mergesort(tab, size, 0);
-        }
-    }
-    is_sorted(tab, size);
+    double control_time = measure_exec_time(size, mergesort, 0);
+    double parallel_time =
+        measure_exec_time(size, regular_mergesort, atoi(argv[2]));
+
+    printf("control: %lf, parallel: %lf\n", control_time, parallel_time);
+
     pthread_mutex_destroy(&mutex_reference);
     return 0;
 }
