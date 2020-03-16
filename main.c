@@ -160,7 +160,7 @@ void is_sorted(int* tab, size_t size) {
     }
 }
 
-void seq_sort_f(int* tab, int size, size_t _) {
+void seq_sort_f(int* tab, size_t size, size_t _) {
     seq_sort(tab, size);
 }
 
@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
     double parallel_time =
         measure_exec_time(atoi(argv[1]), regular_mergesort, atoi(argv[2]));
     printf("Parallel Done\n");
-    double speedup = parallel_time / control_time;
+    // double speedup = parallel_time / control_time;
 
     double seq_time = measure_exec_time(atoi(argv[1]), seq_sort_f, 0);
 
