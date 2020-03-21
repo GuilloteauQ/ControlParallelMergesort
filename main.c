@@ -201,13 +201,13 @@ int main(int argc, char** argv) {
 
     pthread_mutex_init(&mutex_reference, NULL);
 
-    printf("Control Start\n");
+    // printf("Control Start\n");
     double control_time = measure_exec_time(atoi(argv[1]), mergesort, 0);
-    printf("Control Done\n");
-    printf("Paralle Start\n");
+    // printf("Control Done\n");
+    // printf("Paralle Start\n");
     double parallel_time =
         measure_exec_time(atoi(argv[1]), regular_mergesort, atoi(argv[2]));
-    printf("Parallel Done\n");
+    // printf("Parallel Done\n");
     // double speedup = parallel_time / control_time;
 
     double seq_time = measure_exec_time(atoi(argv[1]), seq_sort_f, 0);
